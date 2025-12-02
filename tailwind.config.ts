@@ -100,6 +100,10 @@ export default {
         'gradient-radial-purple': 'radial-gradient(circle, hsl(270 91% 65% / 0.2) 0%, transparent 70%)',
       },
       keyframes: {
+        "spotlight": {
+          "0%": { opacity: "0", transform: "translate(-72%, -62%) scale(0.5)" },
+          "100%": { opacity: "1", transform: "translate(-50%, -40%) scale(1)" },
+        },
         "accordion-down": {
           from: { height: "0", opacity: "0" },
           to: { height: "var(--radix-accordion-content-height)", opacity: "1" },
@@ -151,6 +155,7 @@ export default {
         },
       },
       animation: {
+        "spotlight": "spotlight 2s ease .75s 1 forwards",
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.4s ease-out",
