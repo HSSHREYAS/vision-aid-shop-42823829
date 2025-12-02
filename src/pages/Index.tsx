@@ -1,5 +1,6 @@
 import { CameraView } from '@/components/camera/CameraView';
 import { ProductDetailsModal } from '@/components/product/ProductDetailsModal';
+import { SplineHero } from '@/components/hero/SplineHero';
 import { useApp } from '@/contexts/AppContext';
 import { Mic, Volume2, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,11 +14,16 @@ const Index = () => {
 
   return (
     <main className="container mx-auto animate-fade-in px-4 py-6 md:py-8">
+      {/* 3D Hero Section */}
+      <section className="mb-8">
+        <SplineHero />
+      </section>
+
       {/* Page Header */}
       <div className="mb-6 text-center md:mb-8">
-        <h1 className="font-display text-3xl font-bold tracking-wide text-foreground md:text-4xl">
-          <span className="gradient-text">AI Product</span> Scanner
-        </h1>
+        <h2 className="font-display text-2xl font-bold tracking-wide text-foreground md:text-3xl">
+          <span className="gradient-text">Product</span> Scanner
+        </h2>
         <p className="mt-2 text-muted-foreground">
           Point your camera at products to identify and add them to cart
         </p>
