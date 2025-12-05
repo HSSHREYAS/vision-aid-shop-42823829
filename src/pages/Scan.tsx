@@ -1,52 +1,126 @@
-import { CameraView } from '@/components/camera/CameraView';
+import { CameraView, CameraViewRef } from '@/components/camera/CameraView';
 import { ProductDetailsModal } from '@/components/product/ProductDetailsModal';
 import { useApp } from '@/contexts/AppContext';
-import { Mic, MicOff, Volume2, Eye } from 'lucide-react';
+import { Mic, MicOff, Volume2, Eye, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useVoiceCommands } from '@/hooks/useVoiceCommands';
 import { useNavigate } from 'react-router-dom';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 const Scan = () => {
   const { speak, dispatch, state } = useApp();
   const navigate = useNavigate();
-  const cameraViewRef = useRef<{ startCamera: () => void; stopCamera: () => void; captureFrame: () => void } | null>(null);
+  const cameraRef = useRef<CameraViewRef>(null);
+  const [commandInput, setCommandInput] = useState('');
 
   const handleReadInstructions = () => {
     speak('Welcome to SmartShop. Point your camera at a product to identify it. Press Space to capture, or enable continuous detection for automatic scanning.');
   };
 
-  // Voice command handlers
-  const { isListening, isSupported, toggleListening } = useVoiceCommands({
-    onCapture: () => {
+  // Command execution functions
+  const handleCapture = () => {
+    if (cameraRef.current) {
+      cameraRef.current.captureFrame();
       speak('Capturing image.');
-      // Trigger capture via keyboard event simulation
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space' }));
-    },
-    onAdd: () => {
-      if (state.currentProduct) {
-        speak('Adding item to cart.');
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
-      } else {
-        speak('No product selected. Please scan a product first.');
-      }
-    },
-    onDetails: () => {
-      if (state.detections.length > 0) {
-        speak('Opening product details.');
-        dispatch({ type: 'SET_CURRENT_PRODUCT', payload: {
-          productId: state.detections[0].suggestedProductId || 'PRD001',
-          name: state.detections[0].label,
-          variants: [
-            { variantId: 'V1', size: '500 ml', price: 45, unitPrice: 90, stock: 12 },
-            { variantId: 'V2', size: '1 L', price: 80, unitPrice: 80, stock: 3 },
-          ],
-        }});
-        dispatch({ type: 'TOGGLE_PRODUCT_MODAL', payload: true });
-      } else {
-        speak('No product detected. Please point camera at a product first.');
-      }
-    },
+    } else {
+      speak('Camera not ready.');
+    }
+  };
+
+  const handleAdd = () => {
+    if (state.currentProduct) {
+      const newItem = {
+        cartItemId: `CIT_${Date.now()}`,
+        productId: state.currentProduct.productId,
+        productName: state.currentProduct.name,
+        variantId: state.currentProduct.variants[0]?.variantId || 'V1',
+        variantSize: state.currentProduct.variants[0]?.size || '500ml',
+        quantity: 1,
+        price: state.currentProduct.variants[0]?.price || 45,
+        status: 'confirmed' as const,
+      };
+      dispatch({ type: 'ADD_TO_CART', payload: newItem });
+      speak('Item added to cart.');
+      toast.success('Added to cart!', {
+        action: {
+          label: 'Undo',
+          onClick: () => dispatch({ type: 'REMOVE_FROM_CART', payload: newItem.cartItemId }),
+        },
+      });
+    } else if (state.detections.length > 0) {
+      // Auto-add detected product
+      const detection = state.detections[0];
+      const newItem = {
+        cartItemId: `CIT_${Date.now()}`,
+        productId: detection.suggestedProductId || 'PRD001',
+        productName: detection.label,
+        variantId: 'V1',
+        variantSize: '500ml',
+        quantity: 1,
+        price: 45,
+        status: 'confirmed' as const,
+      };
+      dispatch({ type: 'ADD_TO_CART', payload: newItem });
+      speak(`Added ${detection.label} to cart.`);
+      toast.success(`Added ${detection.label} to cart!`, {
+        action: {
+          label: 'Undo',
+          onClick: () => dispatch({ type: 'REMOVE_FROM_CART', payload: newItem.cartItemId }),
+        },
+      });
+    } else {
+      speak('No product selected. Please scan a product first.');
+    }
+  };
+
+  const handleDetails = () => {
+    if (state.detections.length > 0) {
+      speak('Opening product details.');
+      dispatch({ type: 'SET_CURRENT_PRODUCT', payload: {
+        productId: state.detections[0].suggestedProductId || 'PRD001',
+        name: state.detections[0].label,
+        variants: [
+          { variantId: 'V1', size: '500 ml', price: 45, unitPrice: 90, stock: 12 },
+          { variantId: 'V2', size: '1 L', price: 80, unitPrice: 80, stock: 3 },
+        ],
+      }});
+      dispatch({ type: 'TOGGLE_PRODUCT_MODAL', payload: true });
+    } else {
+      speak('No product detected. Please point camera at a product first.');
+    }
+  };
+
+  const handleStart = () => {
+    if (cameraRef.current) {
+      cameraRef.current.startCamera();
+      speak('Starting camera.');
+    }
+  };
+
+  const handleStop = () => {
+    if (cameraRef.current) {
+      cameraRef.current.stopCamera();
+      speak('Stopping camera.');
+    }
+  };
+
+  const handleUndo = () => {
+    if (state.cart.length > 0) {
+      const lastItem = state.cart[state.cart.length - 1];
+      dispatch({ type: 'REMOVE_FROM_CART', payload: lastItem.cartItemId });
+      speak(`Removed ${lastItem.productName} from cart.`);
+    } else {
+      speak('Cart is empty.');
+    }
+  };
+
+  // Voice command handlers using direct function calls
+  const { isListening, isSupported, toggleListening, executeCommand } = useVoiceCommands({
+    onCapture: handleCapture,
+    onAdd: handleAdd,
+    onDetails: handleDetails,
     onCart: () => {
       speak('Going to cart.');
       navigate('/cart');
@@ -55,19 +129,24 @@ const Scan = () => {
       speak('Opening help page.');
       navigate('/help');
     },
-    onStart: () => {
-      speak('Starting camera.');
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true }));
-    },
-    onStop: () => {
-      speak('Stopping camera.');
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true }));
-    },
-    onUndo: () => {
-      speak('Undoing last action.');
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'u' }));
-    },
+    onStart: handleStart,
+    onStop: handleStop,
+    onUndo: handleUndo,
   });
+
+  // Handle text command submission
+  const handleCommandSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (commandInput.trim()) {
+      const result = executeCommand(commandInput.trim());
+      if (result) {
+        toast.success(`Executed: ${result}`);
+      } else {
+        toast.error('Unknown command');
+      }
+      setCommandInput('');
+    }
+  };
 
   return (
     <main className="container mx-auto animate-fade-in px-4 py-6 md:py-8 min-h-[calc(100vh-4rem)]">
@@ -88,7 +167,7 @@ const Scan = () => {
           <h2 id="camera-heading" className="sr-only">
             Camera and Detection
           </h2>
-          <CameraView />
+          <CameraView ref={cameraRef} />
         </section>
 
         {/* Quick Actions Panel */}
@@ -136,12 +215,27 @@ const Scan = () => {
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {isSupported 
-                      ? (isListening ? 'Say "capture", "add", or "cart"' : 'Say "capture" or "add"')
-                      : 'Not supported in this browser'
+                      ? (isListening ? 'Say "capture", "add", or "cart"' : 'Click to activate')
+                      : 'Not supported - use text input'
                     }
                   </span>
                 </div>
               </Button>
+
+              {/* Text Command Input - Always visible as fallback */}
+              <form onSubmit={handleCommandSubmit} className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="Type command: capture, add, cart..."
+                  value={commandInput}
+                  onChange={(e) => setCommandInput(e.target.value)}
+                  className="flex-1"
+                  aria-label="Type a voice command"
+                />
+                <Button type="submit" size="icon" variant="default" aria-label="Execute command">
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
 
               {/* High Contrast */}
               <Button

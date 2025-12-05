@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { DetectionOverlay } from './DetectionOverlay';
@@ -25,7 +25,15 @@ const mockDetections: Detection[] = [
   },
 ];
 
-export function CameraView() {
+export interface CameraViewRef {
+  startCamera: () => void;
+  stopCamera: () => void;
+  captureFrame: () => void;
+  toggleContinuousMode: () => void;
+  getCameraState: () => CameraState;
+}
+
+export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) {
   const { state, dispatch, speak, announce } = useApp();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -144,6 +152,15 @@ export function CameraView() {
     const newState = !state.isContinuousMode;
     announce(`Continuous detection ${newState ? 'on' : 'off'}.`);
   }, [dispatch, state.isContinuousMode, announce]);
+
+  // Expose functions to parent component via ref
+  useImperativeHandle(ref, () => ({
+    startCamera,
+    stopCamera,
+    captureFrame,
+    toggleContinuousMode,
+    getCameraState: () => cameraState,
+  }), [startCamera, stopCamera, captureFrame, toggleContinuousMode, cameraState]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -341,4 +358,4 @@ export function CameraView() {
       </div>
     </div>
   );
-}
+});
