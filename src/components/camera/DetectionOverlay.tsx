@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { Detection } from '@/types';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
+import { searchProducts } from '@/services/api';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 interface DetectionOverlayProps {
   detections: Detection[];
@@ -8,24 +12,74 @@ interface DetectionOverlayProps {
 
 export function DetectionOverlay({ detections }: DetectionOverlayProps) {
   const { dispatch, speak } = useApp();
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  const handleSelectDetection = (detection: Detection) => {
-    speak(`Selected ${detection.label}. Loading product details.`);
-    
-    // Mock product data - in production this would come from API
-    const mockProduct = {
-      productId: detection.suggestedProductId || 'PRD001',
-      name: detection.label,
-      description: 'Fresh dairy product',
-      variants: [
-        { variantId: 'V1', size: '500 ml', price: 45, unitPrice: 90, stock: 12 },
-        { variantId: 'V2', size: '1 L', price: 80, unitPrice: 80, stock: 3 },
-        { variantId: 'V3', size: '200 ml', price: 22, unitPrice: 110, stock: 25 },
-      ],
-    };
+  const handleSelectDetection = async (detection: Detection) => {
+    speak(`Selected ${detection.label || detection.class_name}. Loading product details.`);
+    setLoadingId(detection.id);
 
-    dispatch({ type: 'SET_CURRENT_PRODUCT', payload: mockProduct });
-    dispatch({ type: 'TOGGLE_PRODUCT_MODAL', payload: true });
+    try {
+      // Search for product in database
+      const response = await searchProducts(
+        detection.brand || '',
+        detection.product_name || detection.class_name,
+        detection.quantity_text
+      );
+
+      if (response.status === 'ok' && response.matches.length > 0) {
+        const match = response.matches[0];
+
+        // Map API ProductMatch to frontend Product format
+        const product = {
+          productId: match.product_id,
+          name: `${match.brand} ${match.name}`.trim(),
+          description: match.description,
+          imageUrl: match.image_url,
+          brand: match.brand,
+          variants: match.variants.map((v, i) => ({
+            variantId: `V${i + 1}`,
+            size: v.size,
+            price: v.price,
+            unitPrice: v.price,
+            stock: 99, // Backend should return stock in future
+          })),
+        };
+
+        dispatch({ type: 'SET_CURRENT_PRODUCT', payload: product });
+        dispatch({ type: 'TOGGLE_PRODUCT_MODAL', payload: true });
+        speak(`Found ${product.name}. ${product.variants.length} sizes available.`);
+      } else {
+        // Fallback: Product not in database
+        speak('Product not found in database. Using detected information.');
+
+        const fallbackProduct = {
+          productId: detection.id,
+          name: detection.label || detection.class_name,
+          description: detection.raw_text || 'Detected product',
+          brand: detection.brand,
+          variants: [
+            {
+              variantId: 'V1',
+              size: detection.quantity_text || 'Standard',
+              price: 100,  // Default fallback price
+              unitPrice: 100,
+              stock: 99
+            },
+          ],
+        };
+
+        dispatch({ type: 'SET_CURRENT_PRODUCT', payload: fallbackProduct });
+        dispatch({ type: 'TOGGLE_PRODUCT_MODAL', payload: true });
+      }
+    } catch (error) {
+      console.error('Product lookup error:', error);
+      speak('Could not load product details. Please try again.');
+      toast.error('Product lookup failed', {
+        description: 'Check your connection to the server.',
+      });
+    } finally {
+      setLoadingId(null);
+    }
   };
 
   if (detections.length === 0) return null;
@@ -33,8 +87,28 @@ export function DetectionOverlay({ detections }: DetectionOverlayProps) {
   return (
     <div className="absolute inset-0" aria-hidden="false">
       {detections.map((detection) => {
-        const [x, y, width, height] = detection.bbox;
+        // Handle both [x1, y1, x2, y2] and [x, y, width, height] formats
+        const bbox = detection.bbox;
+        let x: number, y: number, width: number, height: number;
+
+        if (bbox.length >= 4) {
+          // Assume [x1, y1, x2, y2] format from YOLO
+          const [x1, y1, x2, y2] = bbox;
+          x = x1;
+          y = y1;
+          width = x2 - x1;
+          height = y2 - y1;
+        } else {
+          // Fallback to percentage-based positioning
+          x = 10;
+          y = 10;
+          width = 80;
+          height = 80;
+        }
+
         const confidence = Math.round(detection.confidence * 100);
+        const displayLabel = detection.label || detection.class_name;
+        const isLoading = loadingId === detection.id;
 
         return (
           <div key={detection.id}>
@@ -51,7 +125,7 @@ export function DetectionOverlay({ detections }: DetectionOverlayProps) {
             >
               {/* Label */}
               <div className="absolute -top-8 left-0 flex items-center gap-2 rounded-lg bg-primary/90 px-3 py-1 text-sm font-medium text-primary-foreground shadow-glow-cyan">
-                <span>{detection.label}</span>
+                <span className="max-w-[200px] truncate">{displayLabel}</span>
                 <span className="rounded bg-background/20 px-1.5 py-0.5 text-xs">
                   {confidence}%
                 </span>
@@ -67,7 +141,7 @@ export function DetectionOverlay({ detections }: DetectionOverlayProps) {
             {/* Accessible button overlay */}
             <Button
               variant="ghost"
-              className="absolute opacity-0 focus:opacity-100"
+              className="absolute opacity-0 focus:opacity-100 hover:opacity-50"
               style={{
                 left: `${x}px`,
                 top: `${y}px`,
@@ -75,11 +149,15 @@ export function DetectionOverlay({ detections }: DetectionOverlayProps) {
                 height: `${height}px`,
               }}
               onClick={() => handleSelectDetection(detection)}
-              aria-label={`Select detected product ${detection.label}, confidence ${confidence} percent`}
+              disabled={isLoading}
+              aria-label={`Select detected product ${displayLabel}, confidence ${confidence} percent`}
               aria-describedby={`detection-desc-${detection.id}`}
             >
+              {isLoading && (
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              )}
               <span id={`detection-desc-${detection.id}`} className="sr-only">
-                Press Enter to view product details for {detection.label}
+                Press Enter to view product details for {displayLabel}
               </span>
             </Button>
           </div>

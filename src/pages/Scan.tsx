@@ -8,6 +8,7 @@ import { useVoiceCommands } from '@/hooks/useVoiceCommands';
 import { useNavigate } from 'react-router-dom';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { searchProducts } from '@/services/api';
 
 const Scan = () => {
   const { speak, dispatch, state } = useApp();
@@ -31,18 +32,22 @@ const Scan = () => {
 
   const handleAdd = () => {
     if (state.currentProduct) {
+      // Add from currently selected product (from modal)
+      const variant = state.currentProduct.variants[0];
       const newItem = {
         cartItemId: `CIT_${Date.now()}`,
         productId: state.currentProduct.productId,
         productName: state.currentProduct.name,
-        variantId: state.currentProduct.variants[0]?.variantId || 'V1',
-        variantSize: state.currentProduct.variants[0]?.size || '500ml',
+        variantId: variant?.variantId || 'V1',
+        variantSize: variant?.size || 'Standard',
         quantity: 1,
-        price: state.currentProduct.variants[0]?.price || 45,
+        price: variant?.price || 0,
         status: 'confirmed' as const,
+        brand: state.currentProduct.brand,
+        needsPriceFetch: !variant?.price,
       };
       dispatch({ type: 'ADD_TO_CART', payload: newItem });
-      speak('Item added to cart.');
+      speak(`Added ${state.currentProduct.name} to cart.`);
       toast.success('Added to cart!', {
         action: {
           label: 'Undo',
@@ -50,21 +55,26 @@ const Scan = () => {
         },
       });
     } else if (state.detections.length > 0) {
-      // Auto-add detected product
+      // Auto-add detected product using detection data
       const detection = state.detections[0];
+      const displayName = detection.label || `${detection.brand || ''} ${detection.product_name || detection.class_name}`.trim();
       const newItem = {
         cartItemId: `CIT_${Date.now()}`,
-        productId: detection.suggestedProductId || 'PRD001',
-        productName: detection.label,
+        productId: detection.id,
+        productName: displayName,
         variantId: 'V1',
-        variantSize: '500ml',
+        variantSize: detection.quantity_text || 'Standard',
         quantity: 1,
-        price: 45,
-        status: 'confirmed' as const,
+        price: 0, // Price will be fetched in cart
+        status: 'pending' as const,
+        brand: detection.brand,
+        quantityText: detection.quantity_text,
+        needsPriceFetch: true,
       };
       dispatch({ type: 'ADD_TO_CART', payload: newItem });
-      speak(`Added ${detection.label} to cart.`);
-      toast.success(`Added ${detection.label} to cart!`, {
+      speak(`Added ${displayName} to cart. Price will be fetched.`);
+      toast.success(`Added ${displayName} to cart!`, {
+        description: 'Price will be fetched from database.',
         action: {
           label: 'Undo',
           onClick: () => dispatch({ type: 'REMOVE_FROM_CART', payload: newItem.cartItemId }),
@@ -75,18 +85,60 @@ const Scan = () => {
     }
   };
 
-  const handleDetails = () => {
+  const handleDetails = async () => {
     if (state.detections.length > 0) {
-      speak('Opening product details.');
-      dispatch({ type: 'SET_CURRENT_PRODUCT', payload: {
-        productId: state.detections[0].suggestedProductId || 'PRD001',
-        name: state.detections[0].label,
-        variants: [
-          { variantId: 'V1', size: '500 ml', price: 45, unitPrice: 90, stock: 12 },
-          { variantId: 'V2', size: '1 L', price: 80, unitPrice: 80, stock: 3 },
-        ],
-      }});
-      dispatch({ type: 'TOGGLE_PRODUCT_MODAL', payload: true });
+      const detection = state.detections[0];
+      speak('Loading product details.');
+      dispatch({ type: 'SET_LOADING', payload: true });
+
+      try {
+        // Fetch product details from API
+        const response = await searchProducts(
+          detection.brand || '',
+          detection.product_name || detection.class_name,
+          detection.quantity_text
+        );
+
+        if (response.status === 'ok' && response.matches.length > 0) {
+          const match = response.matches[0];
+          const product = {
+            productId: match.product_id,
+            name: `${match.brand} ${match.name}`.trim(),
+            description: match.description,
+            brand: match.brand,
+            variants: match.variants.map((v, i) => ({
+              variantId: `V${i + 1}`,
+              size: v.size,
+              price: v.price,
+              unitPrice: v.price,
+              stock: 99,
+            })),
+          };
+          dispatch({ type: 'SET_CURRENT_PRODUCT', payload: product });
+          speak(`Found ${product.name}. ${product.variants.length} sizes available.`);
+        } else {
+          // Fallback with detection data
+          const displayName = detection.label || `${detection.brand || ''} ${detection.product_name || detection.class_name}`.trim();
+          dispatch({
+            type: 'SET_CURRENT_PRODUCT', payload: {
+              productId: detection.id,
+              name: displayName,
+              brand: detection.brand,
+              variants: [
+                { variantId: 'V1', size: detection.quantity_text || 'Standard', price: 0, unitPrice: 0, stock: 99 },
+              ],
+            }
+          });
+          speak('Product not in database. Showing detected information.');
+        }
+        dispatch({ type: 'TOGGLE_PRODUCT_MODAL', payload: true });
+      } catch (error) {
+        console.error('Product lookup error:', error);
+        speak('Could not load product details.');
+        toast.error('Failed to load product details');
+      } finally {
+        dispatch({ type: 'SET_LOADING', payload: false });
+      }
     } else {
       speak('No product detected. Please point camera at a product first.');
     }
@@ -179,7 +231,7 @@ const Scan = () => {
             <h3 className="mb-4 font-display text-lg font-semibold text-foreground">
               Quick Actions
             </h3>
-            
+
             <div className="space-y-3">
               {/* Voice Guide */}
               <Button
@@ -214,7 +266,7 @@ const Scan = () => {
                     {isListening ? 'Listening...' : 'Voice Commands'}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {isSupported 
+                    {isSupported
                       ? (isListening ? 'Say "capture", "add", or "cart"' : 'Click to activate')
                       : 'Not supported - use text input'
                     }

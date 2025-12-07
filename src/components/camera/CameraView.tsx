@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHand
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { DetectionOverlay } from './DetectionOverlay';
+import { predictProducts, getAudioUrl } from '@/services/api';
+import { toast } from 'sonner';
 import {
   Camera,
   CameraOff,
@@ -11,19 +13,9 @@ import {
   HelpCircle,
   Upload,
   Focus,
+  Loader2,
 } from 'lucide-react';
 import { CameraState, FacingMode, Detection } from '@/types';
-
-// Mock detections for demo
-const mockDetections: Detection[] = [
-  {
-    id: 'det1',
-    label: 'Amul Milk 500ml',
-    confidence: 0.95,
-    bbox: [120, 100, 200, 280],
-    suggestedProductId: 'PRD001',
-  },
-];
 
 export interface CameraViewRef {
   startCamera: () => void;
@@ -36,13 +28,16 @@ export interface CameraViewRef {
 export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) {
   const { state, dispatch, speak, announce } = useApp();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  
+  const continuousIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const [cameraState, setCameraState] = useState<CameraState>('idle');
   const [facingMode, setFacingMode] = useState<FacingMode>('environment');
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Check for multiple cameras
   useEffect(() => {
@@ -76,14 +71,8 @@ export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) 
       // Set streaming state first so video element renders
       setCameraState('streaming');
       dispatch({ type: 'SET_CAMERA_ACTIVE', payload: true });
-      speak('Camera ready. Hold product inside frame.');
-      
-      // Simulate detection after a short delay
-      setTimeout(() => {
-        dispatch({ type: 'SET_DETECTIONS', payload: mockDetections });
-        speak('Detected: Amul Milk 500ml. Press Enter to hear details.');
-      }, 2000);
-      
+      speak('Camera ready. Point at a product and press Capture to scan.');
+
     } catch (error) {
       console.error('Camera error:', error);
       setCameraState('error');
@@ -101,6 +90,12 @@ export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) 
   }, [cameraState]);
 
   const stopCamera = useCallback(() => {
+    // Stop continuous mode if running
+    if (continuousIntervalRef.current) {
+      clearInterval(continuousIntervalRef.current);
+      continuousIntervalRef.current = null;
+    }
+
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -126,10 +121,10 @@ export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) 
 
   const toggleTorch = useCallback(async () => {
     if (!streamRef.current || !hasTorch) return;
-    
+
     const track = streamRef.current.getVideoTracks()[0];
     const newTorchState = !torchEnabled;
-    
+
     try {
       await track.applyConstraints({
         advanced: [{ torch: newTorchState } as MediaTrackConstraintSet],
@@ -141,17 +136,134 @@ export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) 
     }
   }, [hasTorch, torchEnabled, announce]);
 
-  const captureFrame = useCallback(() => {
-    announce('Capturing image for analysis...');
-    speak('Analyzing product. Please wait.');
-    // In production, this would send a frame to the detection API
-  }, [announce, speak]);
+  // Real frame capture and API call
+  const captureFrame = useCallback(async () => {
+    if (!videoRef.current || cameraState !== 'streaming' || isProcessing) {
+      if (isProcessing) {
+        speak('Still processing previous scan. Please wait.');
+      }
+      return;
+    }
+
+    setIsProcessing(true);
+    dispatch({ type: 'SET_LOADING', payload: true });
+    announce('Capturing and analyzing product...');
+    speak('Analyzing product. Please hold steady.');
+
+    try {
+      // Create canvas and capture frame
+      const video = videoRef.current;
+      const canvas = canvasRef.current || document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Could not get canvas context');
+      }
+
+      ctx.drawImage(video, 0, 0);
+
+      // Convert to base64 JPEG
+      const imageData = canvas.toDataURL('image/jpeg', 0.85);
+
+      // Call prediction API
+      const response = await predictProducts({
+        image: imageData,
+        include_audio: true,
+        language: 'en',
+        min_confidence: 0.3,
+      });
+
+      if (response.status === 'ok' && response.detections.length > 0) {
+        // Transform detections for frontend display
+        const detections: Detection[] = response.detections.map((d) => ({
+          ...d,
+          // Create combined label for display
+          label: [d.brand, d.product_name || d.class_name, d.quantity_text]
+            .filter(Boolean)
+            .join(' ')
+            .trim() || d.class_name,
+        }));
+
+        dispatch({ type: 'SET_DETECTIONS', payload: detections });
+
+        // Use summary from backend or create our own
+        const summary = response.summary ||
+          `Detected ${detections.length} product${detections.length > 1 ? 's' : ''}. ${detections[0].label}. ${detections.length > 1 ? `And ${detections.length - 1} more.` : ''}`;
+
+        speak(summary);
+        announce(summary);
+
+        // Play audio from TTS if available
+        if (response.audio_url) {
+          try {
+            const audio = new Audio(getAudioUrl(response.audio_url));
+            audio.volume = 0.8;
+            // Don't await - let it play in background
+            audio.play().catch((e) => console.warn('Audio playback failed:', e));
+          } catch (audioError) {
+            console.warn('Could not play audio:', audioError);
+          }
+        }
+
+        toast.success(`Detected ${detections.length} product${detections.length > 1 ? 's' : ''}`, {
+          description: detections[0].label,
+        });
+      } else {
+        dispatch({ type: 'SET_DETECTIONS', payload: [] });
+        speak('No products detected. Try moving closer or adjusting the angle.');
+        toast.info('No products detected', {
+          description: 'Try moving the camera closer to the product.',
+        });
+      }
+    } catch (error) {
+      console.error('Detection error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      speak('Detection failed. Please check your connection and try again.');
+      toast.error('Detection failed', {
+        description: errorMessage.includes('fetch') ? 'Backend not available' : errorMessage,
+      });
+    } finally {
+      setIsProcessing(false);
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [cameraState, isProcessing, dispatch, announce, speak]);
 
   const toggleContinuousMode = useCallback(() => {
-    dispatch({ type: 'TOGGLE_CONTINUOUS_MODE' });
     const newState = !state.isContinuousMode;
-    announce(`Continuous detection ${newState ? 'on' : 'off'}.`);
-  }, [dispatch, state.isContinuousMode, announce]);
+    dispatch({ type: 'TOGGLE_CONTINUOUS_MODE' });
+
+    if (newState) {
+      // Start continuous detection - capture every 3 seconds
+      announce('Continuous detection enabled. Scanning every 3 seconds.');
+      speak('Live detection on. I will scan continuously.');
+
+      continuousIntervalRef.current = setInterval(() => {
+        if (cameraState === 'streaming' && !isProcessing) {
+          captureFrame();
+        }
+      }, 3000);
+    } else {
+      // Stop continuous detection
+      if (continuousIntervalRef.current) {
+        clearInterval(continuousIntervalRef.current);
+        continuousIntervalRef.current = null;
+      }
+      announce('Continuous detection disabled.');
+      speak('Live detection off.');
+    }
+  }, [dispatch, state.isContinuousMode, cameraState, isProcessing, captureFrame, announce, speak]);
+
+  // Cleanup continuous mode on unmount
+  useEffect(() => {
+    return () => {
+      if (continuousIntervalRef.current) {
+        clearInterval(continuousIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Expose functions to parent component via ref
   useImperativeHandle(ref, () => ({
@@ -186,6 +298,9 @@ export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) 
 
   return (
     <div className="camera-container flex flex-col gap-4">
+      {/* Hidden canvas for frame capture */}
+      <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
+
       {/* Camera Viewfinder */}
       <div className="camera-viewfinder relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-primary/20 bg-card shadow-glass">
         {cameraState === 'streaming' ? (
@@ -209,6 +324,15 @@ export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) 
               <div className="absolute bottom-0 left-0 h-8 w-8 border-b-2 border-l-2 border-primary/60" />
               <div className="absolute bottom-0 right-0 h-8 w-8 border-b-2 border-r-2 border-primary/60" />
             </div>
+            {/* Processing overlay */}
+            {isProcessing && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-3 rounded-xl bg-card/90 p-6 shadow-lg">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                  <span className="text-sm font-medium text-foreground">Analyzing...</span>
+                </div>
+              </div>
+            )}
           </>
         ) : cameraState === 'error' ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
@@ -292,12 +416,21 @@ export const CameraView = forwardRef<CameraViewRef>(function CameraView(_, ref) 
           variant="outline"
           size="accessible"
           onClick={captureFrame}
-          disabled={cameraState !== 'streaming'}
+          disabled={cameraState !== 'streaming' || isProcessing}
           aria-label="Capture snapshot"
           title="Take a snapshot for better recognition (Space)"
         >
-          <Focus className="mr-2 h-5 w-5" />
-          Capture
+          {isProcessing ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Scanning...
+            </>
+          ) : (
+            <>
+              <Focus className="mr-2 h-5 w-5" />
+              Capture
+            </>
+          )}
         </Button>
 
         {/* Continuous Mode Toggle */}

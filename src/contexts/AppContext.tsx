@@ -25,7 +25,9 @@ type AppAction =
   | { type: 'TOGGLE_CONTINUOUS_MODE' }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<AccessibilitySettings> }
   | { type: 'SET_LIVE_REGION'; payload: string }
-  | { type: 'SET_LOADING'; payload: boolean };
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'UPDATE_CART_ITEM_PRICE'; payload: { cartItemId: string; price: number; variantId: string; variantSize: string } }
+  | { type: 'UPDATE_CART_ITEM_VARIANTS'; payload: { cartItemId: string; variants: import('@/types').ProductVariantAPI[] } };
 
 const initialSettings: AccessibilitySettings = {
   highContrast: false,
@@ -82,6 +84,30 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, liveRegionText: action.payload };
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
+    case 'UPDATE_CART_ITEM_PRICE':
+      return {
+        ...state,
+        cart: state.cart.map(item =>
+          item.cartItemId === action.payload.cartItemId
+            ? {
+              ...item,
+              price: action.payload.price,
+              variantId: action.payload.variantId,
+              variantSize: action.payload.variantSize,
+              needsPriceFetch: false,
+            }
+            : item
+        ),
+      };
+    case 'UPDATE_CART_ITEM_VARIANTS':
+      return {
+        ...state,
+        cart: state.cart.map(item =>
+          item.cartItemId === action.payload.cartItemId
+            ? { ...item, availableVariants: action.payload.variants }
+            : item
+        ),
+      };
     default:
       return state;
   }
@@ -107,20 +133,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const speak = useCallback((text: string) => {
     if (!state.settings.voiceEnabled) return;
-    
+
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
-    
+
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = state.settings.speechRate;
     utterance.pitch = state.settings.speechPitch;
-    
+
     if (state.settings.voiceId) {
       const voices = window.speechSynthesis.getVoices();
       const voice = voices.find(v => v.voiceURI === state.settings.voiceId);
       if (voice) utterance.voice = voice;
     }
-    
+
     window.speechSynthesis.speak(utterance);
     announce(text);
   }, [state.settings, announce]);

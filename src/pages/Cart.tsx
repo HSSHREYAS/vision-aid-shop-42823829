@@ -2,7 +2,7 @@ import { useApp } from '@/contexts/AppContext';
 import { CartItemCard } from '@/components/cart/CartItem';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Trash2, Volume2, ArrowLeft, CreditCard } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +17,7 @@ import {
 
 const Cart = () => {
   const { state, dispatch, cartTotal, cartCount, speak } = useApp();
+  const navigate = useNavigate();
   const { cart } = state;
 
   const tax = cartTotal * 0.18; // 18% GST placeholder
@@ -159,15 +160,12 @@ const Cart = () => {
                 variant="hero"
                 size="xl"
                 className="w-full"
-                disabled
+                onClick={() => navigate('/checkout')}
                 aria-label="Proceed to checkout"
               >
                 <CreditCard className="mr-2 h-5 w-5" />
-                Checkout
+                Proceed to Checkout
               </Button>
-              <p className="mt-3 text-center text-xs text-muted-foreground">
-                Checkout is disabled in demo mode
-              </p>
 
               {/* Coupon placeholder */}
               <div className="mt-6 rounded-xl border border-dashed border-border/50 p-4 text-center">

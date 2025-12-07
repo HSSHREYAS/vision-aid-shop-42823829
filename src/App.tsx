@@ -8,6 +8,7 @@ import { Navigation } from "@/components/layout/Navigation";
 import Index from "./pages/Index";
 import Scan from "./pages/Scan";
 import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
 import Settings from "./pages/Settings";
 import Help from "./pages/Help";
 import NotFound from "./pages/NotFound";
@@ -19,7 +20,7 @@ const App = () => (
     <AppProvider>
       <TooltipProvider>
         <Toaster />
-        <Sonner 
+        <Sonner
           position="bottom-right"
           toastOptions={{
             classNames: {
@@ -39,6 +40,7 @@ const App = () => (
                 <Route path="/" element={<Index />} />
                 <Route path="/scan" element={<Scan />} />
                 <Route path="/cart" element={<Cart />} />
+                <Route path="/checkout" element={<Checkout />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/help" element={<Help />} />
                 <Route path="*" element={<NotFound />} />
@@ -52,3 +54,4 @@ const App = () => (
 );
 
 export default App;
+
