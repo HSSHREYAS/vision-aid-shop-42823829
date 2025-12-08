@@ -37,7 +37,6 @@ Point your phone's camera at any product and instantly hear what it is. Our YOLO
 - **Text-to-Speech summaries** of your cart and orders
 
 ### ♿ Accessibility Built-In
-- WCAG 2.1 AA compliant
 - Screen reader optimized
 - High contrast mode
 - Keyboard navigation with shortcuts
@@ -214,7 +213,7 @@ curl -X POST http://localhost:8000/api/v1/predict \
 **Frontend:**
 - React 18 + TypeScript
 - Vite (build tool)
-- Tailwind CSS + shadcn/ui
+- Tailwind CSS
 - React Router v6
 - Web Speech API (TTS)
 
