@@ -1,73 +1,265 @@
-# Welcome to your Lovable project
+<div align="center">
 
-## Project info
+# 🛒 SmartShop AI
 
-**URL**: https://lovable.dev/projects/2ae95904-6589-4e4b-b8fd-86ab5567f2d1
+### AI-Powered Shopping Assistant for Visually Impaired Users
 
-## How can I edit this code?
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)](https://fastapi.tiangolo.com)
+[![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-00FFFF)](https://ultralytics.com)
+[![Gemini](https://img.shields.io/badge/Gemini-Vision-4285F4?logo=google)](https://ai.google.dev)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-There are several ways of editing your application.
+*Empowering independence through AI-assisted shopping*
 
-**Use Lovable**
+[Demo](#-demo) • [Features](#-features) • [Quick Start](#-quick-start) • [How It Works](#-how-it-works) • [API](#-api-reference)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/2ae95904-6589-4e4b-b8fd-86ab5567f2d1) and start prompting.
+</div>
 
-Changes made via Lovable will be committed automatically to this repo.
+---
 
-**Use your preferred IDE**
+## 🎯 Problem We're Solving
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Shopping independently shouldn't be a challenge for anyone. For visually impaired individuals, identifying products, reading labels, and comparing prices can be overwhelming barriers to everyday independence.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+**SmartShop AI** bridges this gap by combining cutting-edge AI with accessibility-first design, creating a shopping experience that speaks to you.
 
-Follow these steps:
+---
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## ✨ Features
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### 🎥 Real-Time Product Detection
+Point your phone's camera at any product and instantly hear what it is. Our YOLOv8-trained model recognizes products while Gemini Vision reads the label details.
 
-# Step 3: Install the necessary dependencies.
-npm i
+### 🗣️ Voice-First Interface
+- **Natural voice feedback** announces detected products
+- **Voice commands** for hands-free operation
+- **Text-to-Speech summaries** of your cart and orders
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### ♿ Accessibility Built-In
+- WCAG 2.1 AA compliant
+- Screen reader optimized
+- High contrast mode
+- Keyboard navigation with shortcuts
+- Adjustable speech rate and pitch
+
+### 🛍️ Complete Shopping Flow
+1. **Scan** → Detect products with your camera
+2. **Add** → Add items to your cart with one tap or voice command
+3. **Review** → Hear your cart summary anytime
+4. **Checkout** → Complete your order with voice confirmation
+
+---
+
+## 🎬 Demo
+
+<div align="center">
+
+| Scan Product | Add to Cart | Checkout |
+|:---:|:---:|:---:|
+| Point camera at product | Voice: "Add to cart" | "Buy Now" confirms order |
+| AI detects & announces | Item added with price | Voice reads final summary |
+
+</div>
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Node.js** 18+ (for frontend)
+- **Python** 3.10+ (for backend)
+- **Google Gemini API Key** ([Get one free](https://aistudio.google.com/apikey))
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/ChaithanyaNayakaTL/vision-aid-shop-42823829.git
+cd vision-aid-shop-42823829
+```
+
+### 2. Setup Backend
+
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate (Windows)
+venv\Scripts\activate
+# Activate (Mac/Linux)
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment file
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY
+
+# Seed the database
+python -m scripts.seed_products
+
+# Start the server
+uvicorn app.main:app --reload --port 8000
+```
+
+### 3. Setup Frontend
+
+```bash
+# In a new terminal, from project root
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### 4. Open the App
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Visit **http://localhost:5173** and start scanning! 📸
 
-**Use GitHub Codespaces**
+---
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## 🧠 How It Works
 
-## What technologies are used for this project?
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Camera    │────▶│   YOLOv8    │────▶│   Gemini    │
+│   Capture   │     │  Detection  │     │  Vision OCR │
+└─────────────┘     └─────────────┘     └─────────────┘
+                            │                   │
+                            ▼                   ▼
+                    ┌─────────────┐     ┌─────────────┐
+                    │   Product   │◀────│    Text     │
+                    │  Database   │     │  Extraction │
+                    └─────────────┘     └─────────────┘
+                            │
+                            ▼
+                    ┌─────────────┐
+                    │   Voice     │
+                    │  Feedback   │
+                    └─────────────┘
+```
 
-This project is built with:
+1. **Camera captures** a frame when you click "Scan"
+2. **YOLOv8** detects product bounding boxes
+3. **Gemini Vision** reads brand, product name, and quantity
+4. **Database lookup** fetches pricing and available sizes
+5. **Voice synthesis** announces everything to the user
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+---
 
-## How can I deploy this project?
+## 📁 Project Structure
 
-Simply open [Lovable](https://lovable.dev/projects/2ae95904-6589-4e4b-b8fd-86ab5567f2d1) and click on Share -> Publish.
+```
+vision-aid-shop/
+├── 📁 src/                    # React Frontend
+│   ├── components/
+│   │   ├── camera/           # Camera & detection UI
+│   │   ├── cart/             # Shopping cart
+│   │   └── ui/               # shadcn/ui components
+│   ├── contexts/             # State management
+│   ├── pages/                # Route pages
+│   └── services/             # API client
+│
+├── 📁 backend/                # FastAPI Backend
+│   ├── app/
+│   │   ├── api/              # API endpoints
+│   │   ├── models/           # Pydantic & SQLAlchemy
+│   │   └── services/         # YOLO, OCR, TTS, etc.
+│   ├── models/               # YOLOv8 weights (best.pt)
+│   └── storage/              # Generated audio files
+│
+└── 📄 docker-compose.yml     # Run everything together
+```
 
-## Can I connect a custom domain to my Lovable project?
+---
 
-Yes, you can!
+## 🔌 API Reference
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/health` | GET | System health check |
+| `/api/v1/predict` | POST | Product detection with image |
+| `/api/v1/products/search` | GET | Search products by brand/name |
+| `/api/v1/products` | GET | List all products |
+| `/api/v1/orders` | POST | Create a new order |
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+### Example: Detect Products
+
+```bash
+curl -X POST http://localhost:8000/api/v1/predict \
+  -H "Content-Type: application/json" \
+  -d '{"image": "data:image/jpeg;base64,..."}'
+```
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Shift+C` | Start/Stop Camera |
+| `Space` | Capture & Scan |
+| `A` | Add to Cart |
+| `U` | Undo last action |
+| `Ctrl+M` | Toggle continuous detection |
+| `Ctrl+K` | Switch camera |
+| `?` | Open help |
+
+---
+
+## 🛠️ Tech Stack
+
+**Frontend:**
+- React 18 + TypeScript
+- Vite (build tool)
+- Tailwind CSS + shadcn/ui
+- React Router v6
+- Web Speech API (TTS)
+
+**Backend:**
+- FastAPI + Python
+- YOLOv8 (Ultralytics)
+- Google Gemini Vision
+- gTTS (audio generation)
+- SQLite + SQLAlchemy
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Whether it's:
+
+- 🐛 Bug fixes
+- ✨ New features
+- 📖 Documentation improvements
+- 🌍 Translations
+- ♿ Accessibility enhancements
+
+Please open an issue first to discuss what you'd like to change.
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- [Ultralytics](https://ultralytics.com) for YOLOv8
+- [Google](https://ai.google.dev) for Gemini Vision API
+- [shadcn/ui](https://ui.shadcn.com) for beautiful components
+- The visually impaired community for inspiration and feedback
+
+---
+
+<div align="center">
+
+**Built with ❤️ for accessibility**
+
+*Making shopping independent for everyone*
+
+</div>
